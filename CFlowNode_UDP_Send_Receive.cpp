@@ -29,13 +29,12 @@ class CFlowNode_UDP_Send_Receive
 	std::string problem;
 
 	int counter;
+	string output;
 
 	bool m_bEnabled;
 	//SActivationInfo m_actInfo;  // is this needed?  We already just use pActInfo
 	CTimeValue m_lastTime;
 
-	string prefixA;
-	string prefixB;
 
 
 	// -------------------------------------------------------------------------------------------------------------------------------
@@ -46,10 +45,7 @@ class CFlowNode_UDP_Send_Receive
 		EIP_Enable,
 		EIP_Disable,
 		EIP_Port, 
-		EIP_PrefixA,
-		EIP_VecA,
-		EIP_PrefixB,
-		EIP_VecB
+		EIP_Message
 	};
 
 	enum EOutputs
@@ -69,6 +65,7 @@ public:
 		socketWorking = false;
 		m_bEnabled = false;
 		problem = "nothing done";
+		output ="";
 		counter = 0;
 
 	}
@@ -156,10 +153,7 @@ public:
 			InputPortConfig_Void("Enable", _HELP("Enable receiving signals")),
 			InputPortConfig_Void("Disable", _HELP("Disable receiving signals")),
 			InputPortConfig<int>("Port", 1234, _HELP("Port number"), 0,0),
-			InputPortConfig<string>("PrefixA" ,"",_HELP("Prefix for vector A")),
-			InputPortConfig< Vec3 >( "VectorA", Vec3( ZERO ), _HELP( "first vector to send" ) ),
-			InputPortConfig<string>("PrefixB" ,"",_HELP("Prefix for vector B")),
-			InputPortConfig< Vec3 >( "VectorB", Vec3( ZERO ), _HELP( "Second vector to send" ) ),
+			InputPortConfig<string>("Message" ,"",_HELP("Message to send over UDP")),
 			{0}
 		};
 
@@ -195,19 +189,22 @@ public:
 			{
 				// m_actInfo = *pActInfo; // why??
 
-					prefixA = GetPortString(pActInfo, EIP_PrefixA);
-					prefixB = GetPortString(pActInfo, EIP_PrefixB);
+					output = GetPortString(pActInfo, EIP_Message);
 				
 			}
 			break;
 		
 		case eFE_Activate:
 			{
-				if (IsPortActive(pActInfo, EIP_PrefixA)){
-					prefixA = GetPortString(pActInfo, EIP_PrefixA);
-				}
-				if (IsPortActive(pActInfo, EIP_PrefixB)){
-					prefixB = GetPortString(pActInfo, EIP_PrefixB);
+				if (IsPortActive(pActInfo, EIP_Message) && socketWorking){
+					output = GetPortString(pActInfo, EIP_Message);
+					const char* c_str = output.c_str();
+					int iResult = sendto(mySocket, c_str, (int)strlen(c_str), 0, (sockaddr*) &myAddress, sizeof(myAddress)); 
+					if( iResult == SOCKET_ERROR){
+						char buf[512];
+						sprintf(buf, "send failed with error: %d\n", WSAGetLastError());
+						ActivateOutput(pActInfo, EOP_Debug , (string)buf);
+					}
 				}
 				if (IsPortActive(pActInfo, EIP_Enable)) {
 
@@ -231,35 +228,6 @@ public:
 					m_bEnabled = false;
 					endSocket();
 					pActInfo->pGraph->SetRegularlyUpdated(pActInfo->myID, false);
-				}
-				if (IsPortActive(pActInfo, EIP_VecA) && socketWorking) {
-					
-					const Vec3 vec = GetPortVec3( pActInfo, EIP_VecA );
-					// convert to char *
-					char vecBuf[512];
-					sprintf(vecBuf,"%s, %.2f, %.2f, %.2f\n", prefixA, vec.x, vec.y, vec.z);
-					// SEND RESPONSE
-					int iResult = sendto(mySocket, vecBuf, (int)strlen(vecBuf), 0, (sockaddr*) &myAddress, sizeof(myAddress)); 
-					if( iResult == SOCKET_ERROR){
-						char buf[512];
-						sprintf(buf, "send failed with error: %d\n", WSAGetLastError());
-						ActivateOutput(pActInfo, EOP_Debug , (string)buf);
-					}
-					//ActivateOutput(pActInfo, EOP_Debug , (string)vecBuf);
-				}
-				if (IsPortActive(pActInfo, EIP_VecB)  && socketWorking) {
-					const Vec3 vec = GetPortVec3( pActInfo, EIP_VecB );
-					// convert to char *
-					char vecBuf[512];
-					sprintf(vecBuf,"%s, %.2f, %.2f, %.2f\n", prefixB, vec.x, vec.y, vec.z);
-					// SEND RESPONSE
-					int iResult = sendto(mySocket, vecBuf, (int)strlen(vecBuf), 0, (sockaddr*) &myAddress, sizeof(myAddress));  
-					if( iResult == SOCKET_ERROR){
-						char buf[512];
-						sprintf(buf, "send failed with error: %d\n", WSAGetLastError());
-						ActivateOutput(pActInfo, EOP_Debug , (string)buf);
-					}
-					
 				}
 			}
 			break;
