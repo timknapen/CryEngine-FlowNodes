@@ -33,6 +33,7 @@ class CFlowNode_UDP_Send_Receive
 
 	bool m_bEnabled;
 	//SActivationInfo m_actInfo;  // is this needed?  We already just use pActInfo
+	CTimeValue m_lastSend;
 	CTimeValue m_lastTime;
 
 
@@ -67,7 +68,9 @@ public:
 		problem = "nothing done";
 		output ="";
 		counter = 0;
-
+		CTimeValue currTime(0.0f);
+		m_lastTime = currTime;
+		m_lastSend = currTime;
 	}
 	////////////////////////////////////////////////////
 	void endSocket() {
@@ -141,7 +144,7 @@ public:
 	virtual void GetConfiguration( SFlowNodeConfig& config )
 	{
 		/*
-		
+
 		EIP_PrefixA,
 		EIP_VecA,
 		EIP_PrefixB,
@@ -189,20 +192,37 @@ public:
 			{
 				// m_actInfo = *pActInfo; // why??
 
-					output = GetPortString(pActInfo, EIP_Message);
-				
+				output = GetPortString(pActInfo, EIP_Message);
+
 			}
 			break;
-		
+
 		case eFE_Activate:
 			{
 				if (IsPortActive(pActInfo, EIP_Message) && socketWorking){
 					output = GetPortString(pActInfo, EIP_Message);
-					const char* c_str = output.c_str();
-					int iResult = sendto(mySocket, c_str, (int)strlen(c_str), 0, (sockaddr*) &myAddress, sizeof(myAddress)); 
-					if( iResult == SOCKET_ERROR){
+
+					// check for time..
+					CTimeValue currTime(gEnv->pTimer->GetCurrTime());
+					float delay = 0.1;  // processing delay
+					float time = (currTime-m_lastSend).GetSeconds();
+
+
+					// Execute?
+					if (time > delay)
+					{
+						m_lastSend = currTime;
+
+						const char* c_str = output.c_str();
+						int iResult = sendto(mySocket, c_str, (int)strlen(c_str), 0, (sockaddr*) &myAddress, sizeof(myAddress)); 
+						if( iResult == SOCKET_ERROR){
+							char buf[512];
+							sprintf(buf, "send failed with error: %d\n", WSAGetLastError());
+							ActivateOutput(pActInfo, EOP_Debug , (string)buf);
+						}
+					}else{
 						char buf[512];
-						sprintf(buf, "send failed with error: %d\n", WSAGetLastError());
+						sprintf(buf, "not sending, time is %f", time);
 						ActivateOutput(pActInfo, EOP_Debug , (string)buf);
 					}
 				}
