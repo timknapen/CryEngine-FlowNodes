@@ -32,6 +32,7 @@ class CFlowNode_MessageParser
 	enum EOutputs
 	{
 		EOP_Position,
+		EOP_Direction,
 		EOP_Debug
 	};
 
@@ -62,6 +63,7 @@ public:
 		static const SOutputPortConfig outputs[] =
 		{
 			OutputPortConfig<Vec3>("position", _HELP("output position as Vec3")),
+			OutputPortConfig<Vec3>("direction", _HELP("output direction as Vec3")),
 			OutputPortConfig<string>( "Debug", _HELP("This spits out debug messages.")),
 			{0}
 		};
@@ -69,7 +71,7 @@ public:
 		// Fill in configuration
 		config.pInputPorts = inputs;
 		config.pOutputPorts = outputs;
-		config.sDescription = _HELP("parses messages formated like: x[space]y[space]z[newline] x,y,z are float");
+		config.sDescription = _HELP("parses messages formated like:pos x[space]y[space]z[newline] x,y,z are float");
 		//config.SetCategory(EFLN_ADVANCED);
 	}
 
@@ -135,14 +137,19 @@ public:
 		int coordcount = 0;
 		float vec[3];
 		Vec3 posVec; 
+		bool isDirection, isPosition = false;
 		for(int i = 0; i<ilen; i++){
 			switch(istr[i]){
-			case ' ':		// end of a float
-				if(coordcount < 3){
+			case ' ':		// end of a message part
+				if(((string)mssgBuf).compare("pos") == 0){
+					isPosition = true;
+				}else  if(((string)mssgBuf).compare("dir") == 0){
+					isDirection = true;
+				}else if(coordcount < 3 && bufpos > 0){
 					vec[coordcount] = (float)atof(mssgBuf);
+					coordcount++;
 				}
 				bufpos = 0;
-				coordcount++;
 				break;
 			case '\n':		//end of a vector
 				if(coordcount < 3){
@@ -152,7 +159,14 @@ public:
 				coordcount++;
 				if(coordcount == 3){ // I can make a vector now!
 					posVec = Vec3(vec[0],vec[1],vec[2]);
-					ActivateOutput(pActInfo, EOP_Position, posVec ); // send it to the output
+					if(isDirection){
+						ActivateOutput(pActInfo, EOP_Direction, Vec3(vec[0],vec[1],vec[2]) ); // send it to the output
+					}
+					if(isPosition){
+						ActivateOutput(pActInfo, EOP_Position, Vec3(vec[0],vec[1],vec[2]) ); // send it to the output
+					}
+					isDirection = isPosition = false;
+
 				}
 				coordcount = 0;
 
